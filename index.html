@@ -1,0 +1,209 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<title>算法大比拼 · 1亿件商品谁先找到</title>
+<style>
+  * { margin:0; padding:0; box-sizing:border-box; }
+  body {
+    background: linear-gradient(160deg, #0e1a35 0%, #1a2a52 60%, #24386b 100%);
+    color:#fff; font-family:"Microsoft YaHei","微软雅黑",sans-serif;
+    min-height:100vh; display:flex; align-items:center; justify-content:center;
+    user-select:none; overflow:hidden;
+  }
+  /* 舞台铺满整个窗口，标题置顶，结论横幅预留固定位置不挤压其他内容 */
+  .stage {
+    width:100vw; height:100vh;
+    display:flex; flex-direction:column; justify-content:flex-start; gap:2vmin;
+    padding:2.6vmin 3vw 2vmin;
+  }
+  h1 { font-size:10vmin; letter-spacing:.25em; text-align:center; line-height:1.1; }
+  .sub { font-size:3.2vmin; color:#9db4e8; letter-spacing:.12em; text-align:center; }
+  .tracks { display:flex; gap:3vw; flex:1; min-height:0; }
+  .track {
+    flex:1; background:rgba(255,255,255,.06);
+    border:4px solid #33508f; border-radius:2vmin; padding:2.4vmin 2vw;
+    display:flex; flex-direction:column; gap:1.4vmin; min-height:0;
+    position:relative; overflow:hidden;
+  }
+  .track h2 { font-size:5vmin; text-align:center; letter-spacing:.2em; }
+  .track .hint { font-size:3vmin; color:#9db4e8; text-align:center; }
+  .counter { font-size:11vmin; text-align:center; font-weight:bold; color:#ffd76a;
+    font-variant-numeric:tabular-nums; line-height:1.1; }
+  .counter .unit { font-size:5.5vmin; }
+  .bar { height:5vmin; background:#22315c; border-radius:2.5vmin; overflow:hidden; }
+  .fill { height:100%; width:0%; background:linear-gradient(90deg,#f6b73c,#ffd76a);
+    border-radius:2.5vmin; transition:width .1s linear; }
+  .bigNum {
+    font-size:12.5vmin; text-align:center; font-weight:bold; color:#ffd76a;
+    font-variant-numeric:tabular-nums; line-height:1.1; letter-spacing:.05em;
+  }
+  .bigNum.flash { animation:pop .18s ease-out; }
+  @keyframes pop { 0% { transform:scale(1.22); } 100% { transform:scale(1); } }
+  .binStep { font-size:3.4vmin; text-align:center; color:#b8c6ec; min-height:4.4vmin; }
+  .status { font-size:3.4vmin; text-align:center; min-height:4.6vmin; color:#b8c6ec; }
+  .status.done { color:#8dffc0; font-weight:bold; }
+  /* 横幅绝对定位在赛道底部，不占版面——不会撑高赛道、不与按钮重合 */
+  .done-badge {
+    position:absolute; left:50%; bottom:1.6vmin; transform:translateX(-50%);
+    width:72%; font-size:4.6vmin; text-align:center; font-weight:bold; color:#0e1a35;
+    background:linear-gradient(90deg,#ffd76a,#fff3c4,#ffd76a); border-radius:1.6vmin;
+    padding:1vmin 0; letter-spacing:.2em; opacity:0; transition:opacity .3s;
+  }
+  .done-badge.show { opacity:1; animation:pulse 1s ease-in-out infinite; }
+  @keyframes pulse {
+    0%,100% { box-shadow:0 0 2vmin rgba(255,215,106,.4); }
+    50% { box-shadow:0 0 5vmin rgba(255,215,106,.9); }
+  }
+  .btn {
+    font-size:4.8vmin; padding:1.6vmin 5vw; border:none; border-radius:1.8vmin; cursor:pointer;
+    background:linear-gradient(90deg,#f6b73c,#ff9f43); color:#1a1204; font-weight:bold;
+    letter-spacing:.4em; box-shadow:0 .8vmin 2vmin rgba(0,0,0,.4);
+    align-self:center;
+  }
+  .btn:hover { transform:scale(1.03); }
+  .btn:disabled { opacity:.4; cursor:default; transform:none; }
+  /* 结论横幅：固定高度槽位，出现前占位、出现后不挤压任何元素 */
+  .conclusion {
+    height:12vmin; display:flex; align-items:center; justify-content:center;
+    font-size:4.6vmin; color:#ffd76a; text-align:center; letter-spacing:.08em;
+    opacity:0; transition:opacity .8s; font-weight:bold; line-height:1.25;
+  }
+  .conclusion.show { opacity:1; }
+  .foot { font-size:2.6vmin; color:#5f74ad; letter-spacing:.1em; text-align:center; }
+</style>
+</head>
+<body>
+  <div class="stage">
+    <h1>算 法 大 比 拼</h1>
+    <div class="sub">同样在 1 亿件商品里找一件 —— 谁先找到？</div>
+    <div class="tracks">
+      <div class="track">
+        <h2>顺序查找</h2>
+        <div class="hint">一件一件比 · 最坏 1 亿次</div>
+        <div class="counter"><span id="seqNum">0</span> <span class="unit">次</span></div>
+        <div class="bar"><div class="fill" id="seqFill"></div></div>
+        <div class="status" id="seqStatus">蓄势待发</div>
+      </div>
+      <div class="track">
+        <h2>二分查找</h2>
+        <div class="hint">每次砍一半 · 最坏 27 步</div>
+        <div class="bigNum" id="binNum">1 亿</div>
+        <div class="binStep" id="binStep">每次砍掉一半，还剩……</div>
+        <div class="done-badge" id="binBadge">✓ 27 步 · 锁定！</div>
+        <div class="status" id="binStatus" style="min-height:0;"></div>
+      </div>
+    </div>
+    <button class="btn" id="go">开 跑</button>
+    <div class="conclusion" id="concl"></div>
+    <div class="foot">同一台电脑 · 1 亿次 对 27 次 · 真实比较</div>
+  </div>
+
+<script>
+const N = 100000000;            // 1亿
+const CHUNK = 500000;           // 每块50万次（1亿次仍真实跑完，只是让眼睛看得见）
+const SLOW = 25;                // 块间毫秒间隔，顺序查找在屏幕上慢慢爬
+
+// 二分减半序列：1亿 → 5000万 → 2500万 → … → 1（共27步）
+const halves = [];
+let v = N;
+while (v > 1) { v = Math.ceil(v / 2); halves.push(v); }
+
+function fmt(x) {
+  if (x >= 100000000) return '1 亿';
+  if (x >= 1000000) return Math.floor(x / 10000) + ' 万';
+  if (x >= 10000) return (x / 10000).toFixed(1) + ' 万';
+  return String(x);
+}
+
+const goBtn = document.getElementById('go');
+const seqNum = document.getElementById('seqNum');
+const seqFill = document.getElementById('seqFill');
+const seqStatus = document.getElementById('seqStatus');
+const binNum = document.getElementById('binNum');
+const binStep = document.getElementById('binStep');
+const binBadge = document.getElementById('binBadge');
+const concl = document.getElementById('concl');
+
+goBtn.addEventListener('click', run);
+
+// 二分视觉节奏：大数字看久一点，小数字飞快闪过
+const BIN_DELAYS = [...Array(9).fill(170), ...Array(5).fill(90), ...Array(13).fill(45)];
+const BIN_TOTAL = BIN_DELAYS.reduce((a, b) => a + b, 0);
+
+function run() {
+  goBtn.disabled = true;
+  concl.classList.remove('show');
+  concl.textContent = '';
+  seqNum.textContent = '0';
+  seqFill.style.width = '0%';
+  seqStatus.textContent = '开始爬……';
+  seqStatus.classList.remove('done');
+  binNum.textContent = '1 亿';
+  binStep.textContent = '每次砍掉一半，还剩……';
+  binStep.style.opacity = '1';
+  binBadge.classList.remove('show');
+
+  // ---- 右边：二分查找，最坏情况真实执行 ----
+  // 每轮比较后目标总落在右半（最坏路径），区间减半到空：⌊log2(1亿)⌋+1 = 27 步
+  let lo = 0, hi = N - 1, count = 0;
+  const t0 = performance.now();
+  while (lo <= hi) {
+    const mid = (lo + hi) >> 1;
+    count++;                 // 一次真实的区间比较
+    lo = mid + 1;            // 目标比中间大 → 砍掉左半，跨过去
+  }
+  const binMs = performance.now() - t0;
+
+  // 视觉：大数字减半跳动——1亿 → 5000万 → 2500万 → … → 1
+  let i = 0;
+  (function step() {
+    if (i >= halves.length) return;
+    binNum.textContent = fmt(halves[i]);
+    binNum.classList.remove('flash'); void binNum.offsetWidth; binNum.classList.add('flash');
+    binStep.textContent = '第 ' + (i + 1) + ' 步 · 还剩 ' + fmt(halves[i]);
+    i++;
+    setTimeout(step, BIN_DELAYS[i - 1]);
+  })();
+  setTimeout(() => {
+    binStep.textContent = '第 27 步 · 只剩最后 1 个！';
+    binBadge.classList.add('show');
+    binStep.style.opacity = '0';   // 横幅亮起，小字让位
+  }, BIN_TOTAL + 80);
+
+  // ---- 左边：顺序查找，真实跑 1 亿次（最坏：目标不存在） ----
+  // 1 亿次比较一次不少地跑完，只统计纯比较时间；屏幕每 50 万次才刷新一次——它就是这么慢
+  const arr = new Array(N);            // 1亿个坑位
+  let done = 0, pureMs = 0;
+  function chunk() {
+    const c0 = performance.now();
+    for (let j = 0; j < CHUNK; j++) {
+      if (arr[done + j] === -1) break;   // 目标不存在，每次比较都落空
+    }
+    pureMs += performance.now() - c0;
+    done += CHUNK;
+    seqNum.textContent = done >= N ? '1 亿' : (done / 10000).toFixed(0) + ' 万';
+    seqFill.style.width = (done / N * 100).toFixed(2) + '%';
+    if (done < N) {
+      if (done >= N * 0.5) seqStatus.textContent = '才比了一半——二分早就收工了';
+      else if (done >= N * 0.2) seqStatus.textContent = '还在爬……';
+      setTimeout(chunk, SLOW);
+    } else {
+      seqStatus.textContent = '最坏情况 · 1 亿次 · 比较耗时约 ' + (pureMs / 1000).toFixed(1) + ' 秒';
+      seqStatus.classList.add('done');
+      showConclusion();
+    }
+  }
+  setTimeout(chunk, 400);
+}
+
+function showConclusion() {
+  const ratio = Math.round(N / 27);
+  concl.textContent = '1 亿次 对 27 次 —— 快约 ' + ratio.toLocaleString() + ' 万倍，这就是数据结构的选择！';
+  concl.classList.add('show');
+  goBtn.disabled = false;
+  goBtn.textContent = '再 跑 一 次';
+}
+</script>
+</body>
+</html>
